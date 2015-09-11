@@ -78,8 +78,8 @@ x = x.flatten(ndim=2)
 batch_normalize = False
 whiten_inputs = True
 
-dims = [49, 32, 32, 10]
-fs = [rectifier, rectifier, logsoftmax]
+dims = [49, 10, 10, 10]
+fs = [rectifier] * (len(dims) - 1) + [logsoftmax]
 if whiten_inputs:
     cs = [shared_floatx((m,), initialization.Constant(0))
           for m in dims[:-1]]
@@ -92,7 +92,6 @@ if batch_normalize:
               for n in dims[1:]]
 bs = [shared_floatx((n, ), initialization.Constant(0))
       for n in dims[1:]]
-groan = theano.shared(np.array(0.0, dtype=np.float32))
 
 
 # from theano.tensor.nlinalg but float32
@@ -116,8 +115,21 @@ class lstsq(theano.gof.Op):
         outputs[3][0] = zz[3]
 
 
-def recompute_whitening_transform(h, c, U, V, d, bias=1e-5):
+def compute_whitening_parameters(x, bias=1e-5):
+    n = x.shape[0].astype(theano.config.floatX)
+    c = x.mean(axis=0)
+    # we can call svd on the covariance rather than the data, but that
+    # seems to lose accuracy
+    _, s, vT = T.nlinalg.svd(x - c, full_matrices=False)
+    # the covariance will be I / (n - 1); introduce a factor
+    # sqrt(n - 1) here to compensate
+    d = T.sqrt(n - 1) / (s + bias)
+    U = T.dot(vT.T * d, vT)
+    return c, U
+
+def get_whitening_updates(h, c, U, V, d, bias=1e-5):
     updates = []
+    checks = []
 
     # theano applies updates in parallel, so all updates are in terms
     # of the old values.  use this and assign the return value, i.e.
@@ -127,63 +139,56 @@ def recompute_whitening_transform(h, c, U, V, d, bias=1e-5):
         updates.append((variable, new_value))
         return new_value
 
-    n = h.shape[0].astype(theano.config.floatX)
-
     # compute canonical parameters
     W = T.dot(U, V)
     b = d - T.dot(c, W)
 
     # update estimates of c, U
-    c = update(c, h.mean(axis=0))
-    centeredh = h - c
-    # we can call svd on the covariance rather than the data, but that
-    # seems to lose accuracy
-    _, s, vT = T.nlinalg.svd(centeredh, full_matrices=False)
-    # the covariance will be I / (n - 1); introduce a factor
-    # sqrt(n - 1) here to compensate
-    U = update(U, T.dot(vT.T * T.sqrt(n - 1) / (s + bias), vT))
+    newc, newU = compute_whitening_parameters(h, bias)
+    c = update(c, newc)
+    U = update(U, newU)
 
     # check that the new covariance is indeed identity
-    whiteh = T.dot(centeredh, U)
+    n = h.shape[0].astype(theano.config.floatX)
     covar = T.dot(h.T, h) / (n - 1)
+    whiteh = T.dot(h - c, U)
     whitecovar = T.dot(whiteh.T, whiteh) / (n - 1)
-    U = (PdbBreakpoint
-         ("correlated after whitening")
-         (1 - T.allclose(whitecovar,
-                         T.identity_like(whitecovar),
-                         rtol=1e-3, atol=1e-3),
-          U, covar, whitecovar, centeredh, s, vT))[0]
+    checks.append(PdbBreakpoint
+                  ("correlated after whitening")
+                  (1 - T.allclose(whitecovar,
+                                  T.identity_like(whitecovar),
+                                  rtol=1e-3, atol=1e-3),
+                   c, U, covar, whitecovar, h)[0])
 
     # adjust V, d so that the total transformation is unchanged
-    # UV = W so V <- U \ W
-    # lstsq is much more stable than T.inv
+    # (lstsq is much more stable than T.inv)
     V = update(V, lstsq()(U, W, -1)[0])
     d = update(d, b + T.nlinalg.matrix_dot(c, U, V))
 
     # check that the total transformation is unchanged
     before = b + T.dot(h, W)
     after = d + T.nlinalg.matrix_dot(h - c, U, V)
-    breakpoint = (
+    checks.append(
         PdbBreakpoint
         ("transformation changed")
         (1 - T.allclose(before, after,
                         rtol=1e-3, atol=1e-3),
-         T.constant(0.0), W, b, c, U, V, d, h, before, after))[0]
-    # this check needs to be done after *all* updates, so add a dummy
-    # update to perform it
-    updates.append((groan, breakpoint))
+         T.constant(0.0), W, b, c, U, V, d, h, before, after)[0])
 
-    return updates
+    return updates, checks
+
+updates = []
+# theano graphs with assertions & breakpoints, to be evaluated after
+# performing the updates
+checks = []
 
 h = x
 for i, (W, b, f) in enumerate(zip(Ws, bs, fs)):
     if whiten_inputs:
         c, U = cs[i], Us[i]
-
-        updates = recompute_whitening_transform(h, c, U, V=W, d=b)
-        theano.function([features], [],
-                        updates=updates)(train_x)
-
+        wupdates, wchecks = get_whitening_updates(h, c, U, V=W, d=b)
+        updates.extend(wupdates)
+        checks.extend(wchecks)
         h = T.dot(h - c, U)
 
     h = T.dot(h, W)
@@ -209,6 +214,10 @@ flat_gradient = T.concatenate(
 
 fisher = (flat_gradient.dimshuffle(0, "x") *
           flat_gradient.dimshuffle("x", 0))
+
+# run updates & checks
+theano.function([features], updates=updates)(train_x)
+theano.function([features], checks)(train_x)
 
 np_fisher, np_gradient = theano.function([features, targets], [fisher, flat_gradient])(train_x, train_y)
 
