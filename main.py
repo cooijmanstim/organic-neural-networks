@@ -184,9 +184,6 @@ for i, (W, b, f) in enumerate(zip(Ws, bs, fs)):
         theano.function([features], [],
                         updates=updates)(train_x)
 
-        # don't backprop through whitening matrix
-        U = theano.gradient.disconnected_grad(U)
-
         h = T.dot(h - c, U)
 
     h = T.dot(h, W)
