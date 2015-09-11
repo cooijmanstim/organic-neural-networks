@@ -42,7 +42,7 @@ if whiten_inputs:
     Us = [util.shared_floatx((m, m), initialization.Identity())
           for m in dims[:-1]]
 Ws = [util.shared_floatx((m, n), initialization.Orthogonal())
-      for m, n in zip(dims, dims[1:])]
+      for m, n in util.safezip(dims[:-1], dims[1:])]
 if batch_normalize:
     gammas = [util.shared_floatx((n, ), initialization.Constant(1))
               for n in dims[1:]]
@@ -55,7 +55,7 @@ updates = []
 checks = []
 
 h = x
-for i, (W, b, f) in enumerate(zip(Ws, bs, fs)):
+for i, (W, b, f) in enumerate(util.safezip(Ws, bs, fs)):
     if whiten_inputs:
         c, U = cs[i], Us[i]
         wupdates, wchecks = whitening.get_updates(h, c, U, V=W, d=b)
