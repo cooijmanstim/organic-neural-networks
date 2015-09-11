@@ -229,6 +229,8 @@ plt.figure()
 plt.hist(np_fisher.ravel(), bins=30)
 plt.title("fisher histogram")
 
+plt.matshow(abs(np_fisher))
+
 plt.show()
 
 import scipy.misc
