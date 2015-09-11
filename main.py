@@ -127,6 +127,8 @@ def recompute_whitening_transform(h, c, U, V, d, bias=1e-5):
         updates.append((variable, new_value))
         return new_value
 
+    n = h.shape[0].astype(theano.config.floatX)
+
     # compute canonical parameters
     W = T.dot(U, V)
     b = d - T.dot(c, W)
@@ -134,15 +136,17 @@ def recompute_whitening_transform(h, c, U, V, d, bias=1e-5):
     # update estimates of c, U
     c = update(c, h.mean(axis=0))
     centeredh = h - c
+    # we can call svd on the covariance rather than the data, but that
+    # seems to lose accuracy
     _, s, vT = T.nlinalg.svd(centeredh, full_matrices=False)
-    U = update(U, T.dot(vT.T * (1.0 / (s + bias)), vT))
+    # the covariance will be I / (n - 1); introduce a factor
+    # sqrt(n - 1) here to compensate
+    U = update(U, T.dot(vT.T * T.sqrt(n - 1) / (s + bias), vT))
 
     # check that the new covariance is indeed identity
     whiteh = T.dot(centeredh, U)
-    n = h.shape[0].astype(theano.config.floatX)
     covar = T.dot(h.T, h) / (n - 1)
-    # FIXME: whitecovar is now identity, not whitecovar / (n - 1)
-    whitecovar = T.dot(whiteh.T, whiteh)
+    whitecovar = T.dot(whiteh.T, whiteh) / (n - 1)
     U = (PdbBreakpoint
          ("correlated after whitening")
          (1 - T.allclose(whitecovar,
