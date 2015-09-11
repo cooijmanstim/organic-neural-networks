@@ -79,7 +79,7 @@ batch_normalize = False
 whiten_inputs = True
 
 dims = [49, 10, 10, 10]
-fs = [rectifier] * (len(dims) - 1) + [logsoftmax]
+fs = [rectifier for _ in dims[1:-1]] + [logsoftmax]
 if whiten_inputs:
     cs = [shared_floatx((m,), initialization.Constant(0))
           for m in dims[:-1]]
