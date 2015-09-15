@@ -1,3 +1,7 @@
+import sys
+import collections
+from collections import OrderedDict
+
 import numpy as np
 
 import theano
@@ -10,14 +14,14 @@ import activation
 import whitening
 import mnist
 
-[(train_x, train_y), (valid_x, valid_y), (test_x, test_y)] = mnist.get_data()
+datasets = mnist.get_data()
 
 features = T.matrix("features")
 targets = T.ivector("targets")
 
 theano.config.compute_test_value = "warn"
-features.tag.test_value = valid_x
-targets.tag.test_value = valid_y
+features.tag.test_value = datasets["valid"]["features"]
+targets.tag.test_value = datasets["valid"]["targets"]
 
 # downsample to keep number of parameters low
 x = features
@@ -75,41 +79,95 @@ for i, (W, b, f) in enumerate(util.safezip(Ws, bs, fs)):
     h = f(h)
 
 yhat = h
-cross_entropy = yhat[T.arange(yhat.shape[0]), targets].mean(axis=0)
+cross_entropy = -yhat[T.arange(yhat.shape[0]), targets].mean(axis=0)
 
-parameters = [Ws, gammas, bs] if batch_normalize else [Ws, bs]
-gradients = T.grad(cross_entropy, list(util.interleave(*parameters)))
+parameters = list(util.interleave(*([Ws, gammas, bs] if batch_normalize else [Ws, bs])))
+gradients = OrderedDict(zip(parameters, T.grad(cross_entropy, parameters)))
+steps = OrderedDict((parameter, parameter - 1e-2*gradient)
+                    for parameter, gradient
+                    in gradients.items())
 
 flat_gradient = T.concatenate(
-    [gradient.ravel() for gradient in gradients],
+    [gradient.ravel() for gradient in gradients.values()],
     axis=0)
 
 fisher = (flat_gradient.dimshuffle(0, "x") *
           flat_gradient.dimshuffle("x", 0))
 
-# run updates & checks
-theano.function([features], updates=updates)(train_x)
-theano.function([features], checks)(train_x)
+def plot(epoch, fisher):
+    import matplotlib.pyplot as plt
 
-np_fisher, np_gradient = theano.function([features, targets], [fisher, flat_gradient])(train_x, train_y)
+    plt.figure()
+    plt.hist(fisher.ravel(), bins=30)
+    plt.title("fisher histogram")
 
-import matplotlib.pyplot as plt
+    plt.matshow(abs(fisher))
 
-plt.figure()
-plt.hist(np_gradient, bins=30)
-plt.title("gradient histogram")
+    plt.show()
 
-plt.figure()
-plt.hist(np_fisher.ravel(), bins=30)
-plt.title("fisher histogram")
+def dump(epoch, fisher):
+    np.savez("dump/fisher_%i.npz", fisher)
 
-plt.matshow(abs(np_fisher))
+    import scipy.misc
 
-plt.show()
+    scipy.misc.imsave("F_%i.png" % epoch, fisher)
 
-import scipy.misc
+#   print epoch, "condition number:"
+#   print np.linalg.cond(fisher)
 
-scipy.misc.imsave("F.png", np_fisher)
+# super pythonic yo
+def tupelo(x):
+    try:
+        return tuple(x)
+    except TypeError:
+        return x
 
-print "condition number:"
-print np.linalg.cond(np_fisher)
+compile_memo = dict()
+def compile(variables=(), updates=()):
+    key = (tupelo(variables),
+           tuple(OrderedDict(updates).items()))
+    try:
+        return compile_memo[key]
+    except KeyError:
+        return compile_memo.setdefault(
+            key,
+            theano.function(
+                [features, targets],
+                variables,
+                updates=updates,
+                on_unused_input="ignore"))
+
+# compile theano function and compute on select data
+def compute(variables=(), updates=(), which_set=None, subset=None):
+    return (
+        compile(variables=variables, updates=updates)(
+            **datadict(which_set, subset)))
+
+def datadict(which_set, subset=None):
+    dataset = datasets[which_set]
+    return dict(
+        (source,
+         dataset[source]
+         if subset is None
+         else dataset[source][subset])
+        for source in "features targets".split())
+
+nsteps = 3
+batch_size = 100
+for i in xrange(nsteps):
+    print i, "train cross entropy", compute(cross_entropy, which_set="train")
+    compute(updates=updates, which_set="train")
+    compute(checks, which_set="train")
+    np_fisher = compute(fisher, which_set="train")
+    plot(i, np_fisher)
+    dump(i, np_fisher)
+    print i, "training"
+    for a in xrange(0, len(datasets["train"]["features"]), batch_size):
+        b = a + batch_size
+        compute(updates=steps, which_set="train", subset=slice(a, b))
+        sys.stdout.write(".")
+        sys.stdout.flush()
+    print
+    print i, "done"
+
+print nsteps, "train cross entropy", compute(cross_entropy, which_set="train")
