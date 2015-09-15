@@ -39,7 +39,7 @@ batch_normalize = False
 whiten_inputs = True
 
 dims = [49, 10, 10, 10]
-fs = [activation.rectifier for _ in dims[1:-1]] + [activation.logsoftmax]
+fs = [activation.tanh for _ in dims[1:-1]] + [activation.logsoftmax]
 if whiten_inputs:
     cs = [util.shared_floatx((m,), initialization.Constant(0))
           for m in dims[:-1]]
