@@ -7,10 +7,9 @@ import numpy as np
 import theano
 import theano.tensor as T
 
-from blocks import initialization
-
 import util
 import activation
+import initialization
 import whitening
 import mnist
 
@@ -41,16 +40,16 @@ whiten_inputs = True
 dims = [49, 10, 10, 10]
 fs = [activation.tanh for _ in dims[1:-1]] + [activation.logsoftmax]
 if whiten_inputs:
-    cs = [util.shared_floatx((m,), initialization.Constant(0))
+    cs = [util.shared_floatx((m,), initialization.constant(0))
           for m in dims[:-1]]
-    Us = [util.shared_floatx((m, m), initialization.Identity())
+    Us = [util.shared_floatx((m, m), initialization.identity())
           for m in dims[:-1]]
-Ws = [util.shared_floatx((m, n), initialization.Orthogonal())
+Ws = [util.shared_floatx((m, n), initialization.orthogonal())
       for m, n in util.safezip(dims[:-1], dims[1:])]
 if batch_normalize:
-    gammas = [util.shared_floatx((n, ), initialization.Constant(1))
+    gammas = [util.shared_floatx((n, ), initialization.constant(1))
               for n in dims[1:]]
-bs = [util.shared_floatx((n, ), initialization.Constant(0))
+bs = [util.shared_floatx((n, ), initialization.constant(0))
       for n in dims[1:]]
 
 updates = []
