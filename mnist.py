@@ -2,18 +2,18 @@ import os
 import gzip
 import cPickle
 
-def get_data(datasets_dir='/home/tim/datasets/mnist'):
-    data_file = os.path.join(datasets_dir, 'mnist.pkl.gz')
-    if not os.path.exists(data_file):
+def get_data():
+    path = os.environ["MNIST_PKL_GZ"]
+    if not os.path.exists(path):
         try:
             import urllib
             urllib.urlretrieve('http://google.com')
         except AttributeError:
             import urllib.request as urllib
         url = 'http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz'
-        urllib.urlretrieve(url, data_file)
+        urllib.urlretrieve(url, path)
 
-    f = gzip.open(data_file, 'rb')
+    f = gzip.open(path, 'rb')
     try:
         split = cPickle.load(f, encoding="latin1")
     except TypeError:
