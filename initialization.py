@@ -6,6 +6,9 @@ def constant(x):
 def identity():
     return lambda rng, (m, n): np.eye(m, n)
 
+def scaled(scale, initializer):
+    return lambda rng, shape: scale * initializer(rng, shape)
+
 def isotropic_gaussian(mean=0, std=1):
     return lambda rng, shape: rng.normal(mean, std, size=shape)
 

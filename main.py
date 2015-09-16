@@ -46,7 +46,7 @@ if whiten_inputs:
           for m in dims[:-1]]
     Us = [util.shared_floatx((m, m), initialization.identity())
           for m in dims[:-1]]
-Ws = [util.shared_floatx((m, n), initialization.orthogonal())
+Ws = [util.shared_floatx((m, n), initialization.scaled(1e-1, initialization.orthogonal()))
       for m, n in util.safezip(dims[:-1], dims[1:])]
 if batch_normalize:
     gammas = [util.shared_floatx((n, ), initialization.constant(1))
