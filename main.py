@@ -158,7 +158,21 @@ def datadict(which_set, subset=None):
          else dataset[source][subset])
         for source in "features targets".split())
 
-nepochs = 3
+np_fisher_before = compute(fisher, which_set="train")
+compute(updates=updates, which_set="train")
+compute(checks, which_set="train")
+np_fisher_after = compute(fisher, which_set="train")
+
+import matplotlib.pyplot as plt
+assert(np.isreal(np_fisher_before).all())
+assert(np.isreal(np_fisher_after).all())
+plt.matshow(abs(np_fisher_before))
+plt.title("fisher before")
+plt.matshow(abs(np_fisher_after))
+plt.title("fisher after")
+plt.show()
+
+nepochs = 0
 batch_size = 100
 for i in xrange(nepochs):
     print i, "train cross entropy", compute(cross_entropy, which_set="train")
