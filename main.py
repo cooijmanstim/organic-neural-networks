@@ -10,6 +10,7 @@ import theano.tensor as T
 import util
 import activation
 import initialization
+import steprules
 import whitening
 import mnist
 
@@ -36,6 +37,7 @@ x = x.flatten(ndim=2)
 
 batch_normalize = False
 whiten_inputs = True
+steprule = steprules.rmsprop(scale=1e-3)
 
 dims = [49, 10, 10, 10]
 fs = [activation.tanh for _ in dims[1:-1]] + [activation.logsoftmax]
@@ -82,9 +84,14 @@ cross_entropy = -yhat[T.arange(yhat.shape[0]), targets].mean(axis=0)
 
 parameters = list(util.interleave(*([Ws, gammas, bs] if batch_normalize else [Ws, bs])))
 gradients = OrderedDict(zip(parameters, T.grad(cross_entropy, parameters)))
-steps = OrderedDict((parameter, parameter - 1e-2*gradient)
-                    for parameter, gradient
-                    in gradients.items())
+
+steps = []
+step_updates = []
+for parameter, gradient in gradients.items():
+    step, steprule_updates = steprule(parameter, gradient)
+    steps.append((parameter, -step))
+    step_updates.append((parameter, parameter - step))
+    step_updates.extend(steprule_updates)
 
 flat_gradient = T.concatenate(
     [gradient.ravel() for gradient in gradients.values()],
@@ -151,9 +158,9 @@ def datadict(which_set, subset=None):
          else dataset[source][subset])
         for source in "features targets".split())
 
-nsteps = 3
+nepochs = 3
 batch_size = 100
-for i in xrange(nsteps):
+for i in xrange(nepochs):
     print i, "train cross entropy", compute(cross_entropy, which_set="train")
     compute(updates=updates, which_set="train")
     compute(checks, which_set="train")
@@ -163,10 +170,10 @@ for i in xrange(nsteps):
     print i, "training"
     for a in xrange(0, len(datasets["train"]["features"]), batch_size):
         b = a + batch_size
-        compute(updates=steps, which_set="train", subset=slice(a, b))
+        compute(updates=step_updates, which_set="train", subset=slice(a, b))
         sys.stdout.write(".")
         sys.stdout.flush()
     print
     print i, "done"
 
-print nsteps, "train cross entropy", compute(cross_entropy, which_set="train")
+print nepochs, "train cross entropy", compute(cross_entropy, which_set="train")

@@ -2,7 +2,7 @@ import itertools
 import numpy as np
 import theano
 
-rng = np.random.RandomState(0)
+rng = np.random.RandomState(12345)
 
 def safezip(*iterables):
     xss = list(map(list, iterables))
@@ -15,4 +15,3 @@ def interleave(*iterables):
 
 def shared_floatx(shape, initializer):
     return theano.shared(initializer(rng, shape).astype(theano.config.floatX))
-
