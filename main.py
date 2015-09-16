@@ -39,7 +39,7 @@ batch_normalize = False
 whiten_inputs = True
 steprule = steprules.rmsprop(scale=1e-3)
 
-dims = [49, 10, 10, 10]
+dims = [49, 32, 32, 10]
 fs = [activation.tanh for _ in dims[1:-1]] + [activation.logsoftmax]
 if whiten_inputs:
     cs = [util.shared_floatx((m,), initialization.constant(0))
@@ -83,7 +83,16 @@ yhat = h
 cross_entropy = -yhat[T.arange(yhat.shape[0]), targets].mean(axis=0)
 
 parameters = list(util.interleave(*([Ws, gammas, bs] if batch_normalize else [Ws, bs])))
+n_parameters_per_layer = 3 if batch_normalize else 2
 gradients = OrderedDict(zip(parameters, T.grad(cross_entropy, parameters)))
+
+hidden_gradients = list(gradients.values())[n_parameters_per_layer:-n_parameters_per_layer]
+flat_gradient = T.concatenate(
+    [gradient.ravel() for gradient in hidden_gradients],
+    axis=0)
+
+fisher = (flat_gradient.dimshuffle(0, "x") *
+          flat_gradient.dimshuffle("x", 0))
 
 steps = []
 step_updates = []
@@ -92,13 +101,6 @@ for parameter, gradient in gradients.items():
     steps.append((parameter, -step))
     step_updates.append((parameter, parameter - step))
     step_updates.extend(steprule_updates)
-
-flat_gradient = T.concatenate(
-    [gradient.ravel() for gradient in gradients.values()],
-    axis=0)
-
-fisher = (flat_gradient.dimshuffle(0, "x") *
-          flat_gradient.dimshuffle("x", 0))
 
 def plot(epoch, fisher):
     import matplotlib.pyplot as plt
