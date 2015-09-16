@@ -172,6 +172,12 @@ plt.matshow(abs(np_fisher_before))
 plt.title("fisher before")
 plt.matshow(abs(np_fisher_after))
 plt.title("fisher after")
+plt.figure()
+plt.hist(np_fisher_before.ravel(), bins=100)
+plt.title("fisher before hist")
+plt.figure()
+plt.hist(np_fisher_after.ravel(), bins=100)
+plt.title("fisher after hist")
 plt.show()
 
 nepochs = 0
