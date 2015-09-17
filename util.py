@@ -1,6 +1,7 @@
 import itertools
 import numpy as np
 import theano
+import theano.tensor as T
 
 rng = np.random.RandomState(12345)
 
@@ -15,3 +16,7 @@ def interleave(*iterables):
 
 def shared_floatx(shape, initializer):
     return theano.shared(initializer(rng, shape).astype(theano.config.floatX))
+
+def batched_flatcat(xs):
+    return T.concatenate([x.flatten(ndim=2) for x in xs],
+                         axis=1)
