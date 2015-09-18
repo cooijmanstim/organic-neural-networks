@@ -100,7 +100,9 @@ parameters = list(util.interleave(*([Ws, gammas, bs] if batch_normalize else [Ws
 n_parameters_per_layer = 3 if batch_normalize else 2
 gradients = OrderedDict(zip(parameters, T.grad(cost, parameters)))
 
-hidden_parameters = parameters[n_parameters_per_layer:-n_parameters_per_layer]
+hidden_parameters = parameters
+hidden_parameters = hidden_parameters[n_parameters_per_layer:]  # remove visible layer parameters
+#hidden_parameters = hidden_parameters[:-n_parameters_per_layer] # remove softmax layer parameters
 
 def estimate_fisher(outputs, n_outputs, parameters):
     # shape (sample_size, n_outputs, #parameters)
