@@ -118,11 +118,11 @@ def estimate_fisher(outputs, n_outputs, parameters):
 # estimate_fisher will perform one backpropagation per sample, so
 # don't go wild
 sample_size = 100
-if True:
+if objective == "loss":
     # fisher on loss
     fisher = estimate_fisher(cross_entropy[:sample_size, np.newaxis],
                              1, hidden_parameters)
-else:
+elif objective == "output":
     # fisher on output
     fisher = estimate_fisher(logp[:sample_size, :],
                              n_outputs, hidden_parameters)
@@ -134,27 +134,6 @@ for parameter, gradient in gradients.items():
     steps.append((parameter, -step))
     step_updates.append((parameter, parameter - step))
     step_updates.extend(steprule_updates)
-
-def plot(epoch, fisher):
-    import matplotlib.pyplot as plt
-
-    plt.figure()
-    plt.hist(fisher.ravel(), bins=30)
-    plt.title("fisher histogram")
-
-    plt.matshow(abs(fisher))
-
-    plt.show()
-
-def dump(epoch, fisher):
-    np.savez("dump/fisher_%i.npz", fisher)
-
-    import scipy.misc
-
-    scipy.misc.imsave("F_%i.png" % epoch, fisher)
-
-#   print epoch, "condition number:"
-#   print np.linalg.cond(fisher)
 
 # super pythonic yo
 def tupelo(x):
@@ -198,24 +177,9 @@ compute(updates=updates, which_set="train")
 compute(checks, which_set="train")
 np_fisher_after = compute(fisher, which_set="train")
 
-import matplotlib.pyplot as plt
-assert(np.isreal(np_fisher_before).all())
-assert(np.isreal(np_fisher_after).all())
-plt.matshow(abs(np_fisher_before))
-plt.title("fisher before")
-plt.matshow(abs(np_fisher_after))
-plt.title("fisher after")
-plt.figure()
-plt.hist(np_fisher_before.ravel(), bins=100)
-plt.title("fisher before hist")
-plt.figure()
-plt.hist(np_fisher_after.ravel(), bins=100)
-plt.title("fisher after hist")
-plt.show()
-
-import scipy.misc
-scipy.misc.imsave("F_before.png", abs(np_fisher_before))
-scipy.misc.imsave("F_after.png", abs(np_fisher_after))
+prefix = "F%s_%s" % (objective, whitening_strategy)
+util.matsave("%s_before.png" % prefix, abs(np_fisher_before))
+util.matsave("%s_after.png" % prefix, abs(np_fisher_after))
 
 nepochs = 0
 batch_size = 100
@@ -224,8 +188,7 @@ for i in xrange(nepochs):
     compute(updates=updates, which_set="train")
     compute(checks, which_set="train")
     np_fisher = compute(fisher, which_set="train")
-    plot(i, np_fisher)
-    dump(i, np_fisher)
+    util.matsave("%s_%i.png" % (prefix, i), abs(np_fisher))
     print i, "training"
     for a in xrange(0, len(datasets["train"]["features"]), batch_size):
         b = a + batch_size

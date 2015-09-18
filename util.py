@@ -20,3 +20,10 @@ def shared_floatx(shape, initializer):
 def batched_flatcat(xs):
     return T.concatenate([x.flatten(ndim=2) for x in xs],
                          axis=1)
+
+def matsave(path, arr):
+    from PIL import Image
+    import matplotlib.cm
+    import scipy.misc
+    im = Image.fromarray(matplotlib.cm.jet(arr, bytes=True))
+    scipy.misc.imsave(path, im)
