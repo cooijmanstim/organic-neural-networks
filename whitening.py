@@ -24,19 +24,32 @@ class lstsq(theano.gof.Op):
         outputs[2][0] = numpy.array(zz[2])
         outputs[3][0] = zz[3]
 
-def compute_parameters(x, bias=1e-5):
+def whiten_by_svd(x, bias, zca):
     n = x.shape[0].astype(theano.config.floatX)
-    c = x.mean(axis=0)
-    # we can call svd on the covariance rather than the data, but that
-    # seems to lose accuracy
-    _, s, vT = T.nlinalg.svd(x - c, full_matrices=False)
+    _, s, vT = T.nlinalg.svd(x, full_matrices=False)
     # the covariance will be I / (n - 1); introduce a factor
     # sqrt(n - 1) here to compensate
-    d = T.sqrt(n - 1) / (s + bias)
-    U = T.dot(vT.T * d, vT)
-    return c, U
+    D = T.diag(T.sqrt((n - 1) / (s**2 + bias)))
+    U = T.dot(D, vT)
+    if zca:
+        U = T.dot(vT.T, U)
+    return U
 
-def get_updates(h, c, U, V, d, bias=1e-5):
+def whiten_by_eigh(x, bias, zca):
+    n = x.shape[0].astype(theano.config.floatX)
+    covar = T.dot(x.T, x) / (n - 1)
+    s, v = T.nlinalg.eigh(covar)
+    D = T.diag(1.0 / T.sqrt(s**2 + bias))
+    U = T.dot(D, v.T)
+    if zca:
+        U = T.dot(v, U)
+    return U
+
+whiten_by = dict(
+    svd=whiten_by_svd,
+    eigh=whiten_by_eigh)
+
+def get_updates(h, c, U, V, d, bias=1e-5, strategy="svd", zca=True):
     updates = []
     checks = []
 
@@ -53,13 +66,12 @@ def get_updates(h, c, U, V, d, bias=1e-5):
     b = d - T.dot(c, W)
 
     # update estimates of c, U
-    newc, newU = compute_parameters(h, bias)
-    c = update(c, newc)
-    U = update(U, newU)
+    c = update(c, h.mean(axis=0))
+    U = update(U, whiten_by[strategy](h - c, bias, zca))
 
     # check that the new covariance is indeed identity
     n = h.shape[0].astype(theano.config.floatX)
-    covar = T.dot(h.T, h) / (n - 1)
+    covar = T.dot((h - c).T, (h - c)) / (n - 1)
     whiteh = T.dot(h - c, U)
     whitecovar = T.dot(whiteh.T, whiteh) / (n - 1)
     checks.append(PdbBreakpoint

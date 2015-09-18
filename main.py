@@ -61,11 +61,22 @@ updates = []
 # performing the updates
 checks = []
 
+# "eigh" on covariance or "svd" on data matrix
+whitening_strategy = "svd"
+# whether to use ZCA (i.e. preserve input representation as much as possible)
+zca = True
+# compute fisher based on supervised "loss" or model "output"
+objective = "output"
+# eigenvalue bias
+bias = 1e-1
+
 h = x
 for i, (W, b, f) in enumerate(util.safezip(Ws, bs, fs)):
     if whiten_inputs:
         c, U = cs[i], Us[i]
-        wupdates, wchecks = whitening.get_updates(h, c, U, V=W, d=b)
+        wupdates, wchecks = whitening.get_updates(h, c, U, V=W, d=b,
+                                                  strategy=whitening_strategy,
+                                                  zca=zca, bias=bias)
         updates.extend(wupdates)
         checks.extend(wchecks)
         h = T.dot(h - c, U)
