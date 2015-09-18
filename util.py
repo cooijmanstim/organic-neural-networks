@@ -25,6 +25,10 @@ def matsave(path, arr):
     from PIL import Image
     import matplotlib.cm
     import scipy.misc
+    # normalize
+    arr -= arr.min()
+    arr /= arr.max()
+    # rgb using matplotlib's default colormap
     im = Image.fromarray(matplotlib.cm.jet(arr, bytes=True))
     scipy.misc.imsave(path, im)
 
