@@ -34,3 +34,23 @@ def tupelo(x):
         return tuple(x)
     except TypeError:
         return x
+
+# from theano.tensor.nlinalg but float32
+numpy = np
+class lstsq(theano.gof.Op):
+    __props__ = ()
+
+    def make_node(self, x, y, rcond):
+        x = theano.tensor.as_tensor_variable(x)
+        y = theano.tensor.as_tensor_variable(y)
+        rcond = theano.tensor.as_tensor_variable(rcond)
+        return theano.Apply(self, [x, y, rcond],
+                            [theano.tensor.fmatrix(), theano.tensor.fvector(),
+                             theano.tensor.lscalar(), theano.tensor.fvector()])
+
+    def perform(self, node, inputs, outputs):
+        zz = numpy.linalg.lstsq(inputs[0], inputs[1], inputs[2])
+        outputs[0][0] = zz[0]
+        outputs[1][0] = zz[1]
+        outputs[2][0] = numpy.array(zz[2])
+        outputs[3][0] = zz[3]
