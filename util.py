@@ -27,3 +27,10 @@ def matsave(path, arr):
     import scipy.misc
     im = Image.fromarray(matplotlib.cm.jet(arr, bytes=True))
     scipy.misc.imsave(path, im)
+
+# super pythonic yo
+def tupelo(x):
+    try:
+        return tuple(x)
+    except TypeError:
+        return x

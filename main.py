@@ -137,16 +137,9 @@ for parameter, gradient in gradients.items():
     step_updates.append((parameter, parameter - step))
     step_updates.extend(steprule_updates)
 
-# super pythonic yo
-def tupelo(x):
-    try:
-        return tuple(x)
-    except TypeError:
-        return x
-
 compile_memo = dict()
 def compile(variables=(), updates=()):
-    key = (tupelo(variables),
+    key = (util.tupelo(variables),
            tuple(OrderedDict(updates).items()))
     try:
         return compile_memo[key]
