@@ -14,19 +14,19 @@ import whitening
 import mnist
 
 n_outputs = 10
-batch_normalize = False
-whiten_inputs = True
 steprule = steprules.rmsprop(scale=1e-3)
 
-# "eigh" on covariance or "svd" on data matrix
-whitening_strategy = "svd"
-# whether to use ZCA (i.e. preserve input representation as much as possible)
-zca = True
-# compute fisher based on supervised "loss" or model "output"
-objective = "output"
-# eigenvalue bias
-bias = 1e-1
-
+hyperparameters = dict(
+    # "eigh" on covariance matrix or "svd" on data matrix
+    decomposition="svd",
+    # whether to remix after whitening
+    zca=True,
+    # compute fisher based on supervised "loss" or model "output"
+    objective="output",
+    # eigenvalue bias
+    bias=1e-3,
+    batch_normalize=True,
+    whiten_inputs=False)
 
 datasets = mnist.get_data()
 
@@ -87,14 +87,14 @@ dims = [(28 / reduction)**2, 16, 16, 16, n_outputs]
 
 # allocate parameters
 fs = [activation.tanh for _ in dims[1:-1]] + [activation.logsoftmax]
-if whiten_inputs:
+if hyperparameters["whiten_inputs"]:
     cs = [util.shared_floatx((m,), initialization.constant(0))
           for m in dims[:-1]]
     Us = [util.shared_floatx((m, m), initialization.identity())
           for m in dims[:-1]]
 Ws = [util.shared_floatx((m, n), initialization.orthogonal())
       for m, n in util.safezip(dims[:-1], dims[1:])]
-if batch_normalize:
+if hyperparameters["batch_normalize"]:
     gammas = [util.shared_floatx((n, ), initialization.constant(1))
               for n in dims[1:]]
 bs = [util.shared_floatx((n, ), initialization.constant(0))
@@ -109,18 +109,20 @@ checks = []
 # construct theano graph
 h = x
 for i, (W, b, f) in enumerate(util.safezip(Ws, bs, fs)):
-    if whiten_inputs:
+    if hyperparameters["whiten_inputs"]:
         c, U = cs[i], Us[i]
-        wupdates, wchecks = whitening.get_updates(h, c, U, V=W, d=b,
-                                                  strategy=whitening_strategy,
-                                                  zca=zca, bias=bias)
+        wupdates, wchecks = whitening.get_updates(
+            h, c, U, V=W, d=b,
+            decomposition=hyperparameters["decomposition"],
+            zca=hyperparameters["zca"],
+            bias=hyperparameters["bias"])
         updates.extend(wupdates)
         checks.extend(wchecks)
         h = T.dot(h - c, U)
 
     h = T.dot(h, W)
 
-    if batch_normalize:
+    if hyperparameters["batch_normalize"]:
         mean = h.mean(axis=0, keepdims=True)
         var  = h.var (axis=0, keepdims=True)
         h = (h - mean) / T.sqrt(var + 1e-16)
@@ -146,9 +148,10 @@ def estimate_fisher(outputs, n_outputs, parameters):
     fisher = T.dot(grads.T, grads) / grads.shape[0]
     return fisher
 
-
-parameters = list(util.interleave(*([Ws, gammas, bs] if batch_normalize else [Ws, bs])))
-n_parameters_per_layer = 3 if batch_normalize else 2
+parameters = list(util.interleave(*(
+    [Ws, gammas, bs]
+    if hyperparameters["batch_normalize"] else [Ws, bs])))
+n_parameters_per_layer = 3 if hyperparameters["batch_normalize"] else 2
 
 hidden_parameters = parameters
 hidden_parameters = hidden_parameters[n_parameters_per_layer:]  # remove visible layer parameters
@@ -157,11 +160,11 @@ hidden_parameters = hidden_parameters[n_parameters_per_layer:]  # remove visible
 # estimate_fisher will perform one backpropagation per sample, so
 # don't go wild
 sample_size = 100
-if objective == "loss":
+if hyperparameters["objective"] == "loss":
     # fisher on loss
     fisher = estimate_fisher(cross_entropy[:sample_size, np.newaxis],
                              1, hidden_parameters)
-elif objective == "output":
+elif hyperparameters["objective"] == "output":
     # fisher on output
     fisher = estimate_fisher(logp[:sample_size, :],
                              n_outputs, hidden_parameters)

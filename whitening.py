@@ -29,7 +29,7 @@ whiten_by = dict(
     svd=whiten_by_svd,
     eigh=whiten_by_eigh)
 
-def get_updates(h, c, U, V, d, bias=1e-5, strategy="svd", zca=True):
+def get_updates(h, c, U, V, d, bias=1e-5, decomposition="svd", zca=True):
     updates = []
     checks = []
 
@@ -47,7 +47,7 @@ def get_updates(h, c, U, V, d, bias=1e-5, strategy="svd", zca=True):
 
     # update estimates of c, U
     c = update(c, h.mean(axis=0))
-    U = update(U, whiten_by[strategy](h - c, bias, zca))
+    U = update(U, whiten_by[decomposition](h - c, bias, zca))
 
     # check that the new covariance is indeed identity
     n = h.shape[0].astype(theano.config.floatX)
