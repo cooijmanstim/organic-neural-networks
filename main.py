@@ -169,15 +169,6 @@ elif hyperparameters["objective"] == "output":
     fisher = estimate_fisher(logp[:sample_size, :],
                              n_outputs, hidden_parameters)
 
-np_fisher_before = compute(fisher, which_set="train")
-compute(updates=updates, which_set="train")
-compute(checks, which_set="train")
-np_fisher_after = compute(fisher, which_set="train")
-
-prefix = "F%s_%s" % (objective, whitening_strategy)
-util.matsave("%s_before.png" % prefix, abs(np_fisher_before))
-util.matsave("%s_after.png" % prefix, abs(np_fisher_after))
-
 # maybe train for a couple of epochs and track the FIM
 gradients = OrderedDict(zip(parameters, T.grad(cost, parameters)))
 steps = []
@@ -188,14 +179,18 @@ for parameter, gradient in gradients.items():
     step_updates.append((parameter, parameter - step))
     step_updates.extend(steprule_updates)
 
-nepochs = 0
+# for these experiments, whiten once and then nevermore
+compute(updates=updates, which_set="train")
+compute(checks, which_set="train")
+
+nepochs = 100
 batch_size = 100
+np_fishers = []
+cross_entropies = []
 for i in xrange(nepochs):
-    print i, "train cross entropy", compute(cost, which_set="train")
-    compute(updates=updates, which_set="train")
-    compute(checks, which_set="train")
-    np_fisher = compute(fisher, which_set="train")
-    util.matsave("%s_%i.png" % (prefix, i), abs(np_fisher))
+    np_fishers.append(compute(fisher, which_set="train"))
+    cross_entropies.append(compute(cost, which_set="train"))
+    print i, "train cross entropy", cross_entropies[-1]
     print i, "training"
     for a in xrange(0, len(datasets["train"]["features"]), batch_size):
         b = a + batch_size
@@ -204,5 +199,11 @@ for i in xrange(nepochs):
         sys.stdout.flush()
     print
     print i, "done"
+cross_entropies.append(compute(cost, which_set="train"))
 
-print nepochs, "train cross entropy", compute(cost, which_set="train")
+identifier = hash(hyperparameters)
+np.savez_compressed("fishers_%s.npz" % identifier,
+                    fishers=np.asarray(np_fishers),
+                    cross_entropies=np.asarray(cross_entropies))
+cPickle.dump(hyperparameters,
+             "hyperparameters_%s.yaml" % identifier)
