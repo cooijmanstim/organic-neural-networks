@@ -1,5 +1,7 @@
 import sys
 from collections import OrderedDict
+import yaml
+import itertools
 
 import numpy as np
 
@@ -26,7 +28,8 @@ hyperparameters = dict(
     # eigenvalue bias
     bias=1e-3,
     batch_normalize=True,
-    whiten_inputs=False)
+    whiten_inputs=False,
+    share_parameters=True)
 
 datasets = mnist.get_data()
 
@@ -87,16 +90,19 @@ dims = [(28 / reduction)**2, 16, 16, 16, n_outputs]
 
 # allocate parameters
 fs = [activation.tanh for _ in dims[1:-1]] + [activation.logsoftmax]
-if hyperparameters["whiten_inputs"]:
-    cs = [util.shared_floatx((m,), initialization.constant(0))
-          for m in dims[:-1]]
-    Us = [util.shared_floatx((m, m), initialization.identity())
-          for m in dims[:-1]]
+# layer input means
+cs = [util.shared_floatx((m,), initialization.constant(0))
+        for m in dims[:-1]]
+# layer input whitening matrices
+Us = [util.shared_floatx((m, m), initialization.identity())
+        for m in dims[:-1]]
+# weight matrices
 Ws = [util.shared_floatx((m, n), initialization.orthogonal())
       for m, n in util.safezip(dims[:-1], dims[1:])]
-if hyperparameters["batch_normalize"]:
-    gammas = [util.shared_floatx((n, ), initialization.constant(1))
-              for n in dims[1:]]
+# batch normalization diagonal scales
+gammas = [util.shared_floatx((n, ), initialization.constant(1))
+            for n in dims[1:]]
+# biases or betas
 bs = [util.shared_floatx((n, ), initialization.constant(0))
       for n in dims[1:]]
 
@@ -106,11 +112,21 @@ updates = []
 # performing the updates
 checks = []
 
+parameters_by_layer = []
+
 # construct theano graph
 h = x
-for i, (W, b, f) in enumerate(util.safezip(Ws, bs, fs)):
+for i in xrange(len(dims) - 1):
+    layer_parameters = []
+
+    if hyperparameters["share_parameters"]:
+        # for the compatible layers
+        if Ws[i].shape == Ws[1].shape:
+            i = 1
+
+    c, U, W, gamma, b, f = cs[i], Us[i], Ws[i], gammas[i], bs[i], fs[i]
+
     if hyperparameters["whiten_inputs"]:
-        c, U = cs[i], Us[i]
         wupdates, wchecks = whitening.get_updates(
             h, c, U, V=W, d=b,
             decomposition=hyperparameters["decomposition"],
@@ -119,17 +135,27 @@ for i, (W, b, f) in enumerate(util.safezip(Ws, bs, fs)):
         updates.extend(wupdates)
         checks.extend(wchecks)
         h = T.dot(h - c, U)
+        layer_parameters.extend([c, U])
 
     h = T.dot(h, W)
+    layer_parameters.append(W)
 
     if hyperparameters["batch_normalize"]:
         mean = h.mean(axis=0, keepdims=True)
         var  = h.var (axis=0, keepdims=True)
         h = (h - mean) / T.sqrt(var + 1e-16)
         h *= gammas[i]
+        layer_parameters.append(gammas[i])
 
     h += b
+    layer_parameters.append(b)
     h = f(h)
+
+    parameters_by_layer.append(layer_parameters)
+
+if hyperparameters["share_parameters"]:
+    # remove repeated parameters
+    del parameters_by_layer[2:-1]
 
 logp = h
 cross_entropy = -logp[T.arange(logp.shape[0]), targets]
@@ -138,8 +164,7 @@ cost = cross_entropy.mean(axis=0)
 def estimate_fisher(outputs, n_outputs, parameters):
     # shape (sample_size, n_outputs, #parameters)
     grads = T.stack(*[util.batched_flatcat(
-        T.jacobian(outputs[:, j],
-                   hidden_parameters))
+        T.jacobian(outputs[:, j], parameters))
         for j in xrange(n_outputs)])
     # ravel the batch and output axes so that the product will sum
     # over the outputs *and* over the batch. divide by the batch
@@ -148,28 +173,22 @@ def estimate_fisher(outputs, n_outputs, parameters):
     fisher = T.dot(grads.T, grads) / grads.shape[0]
     return fisher
 
-parameters = list(util.interleave(*(
-    [Ws, gammas, bs]
-    if hyperparameters["batch_normalize"] else [Ws, bs])))
-n_parameters_per_layer = 3 if hyperparameters["batch_normalize"] else 2
-
-hidden_parameters = parameters
-hidden_parameters = hidden_parameters[n_parameters_per_layer:]  # remove visible layer parameters
-#hidden_parameters = hidden_parameters[:-n_parameters_per_layer] # remove softmax layer parameters
-
 # estimate_fisher will perform one backpropagation per sample, so
 # don't go wild
 sample_size = 100
+# don't include visible layer parameters; too many and not full rank
+fisher_parameters = list(itertools.chain(*parameters_by_layer[1:]))
 if hyperparameters["objective"] == "loss":
     # fisher on loss
     fisher = estimate_fisher(cross_entropy[:sample_size, np.newaxis],
-                             1, hidden_parameters)
+                             1, fisher_parameters)
 elif hyperparameters["objective"] == "output":
     # fisher on output
     fisher = estimate_fisher(logp[:sample_size, :],
-                             n_outputs, hidden_parameters)
+                             n_outputs, fisher_parameters)
 
 # maybe train for a couple of epochs and track the FIM
+parameters = list(itertools.chain(*parameters_by_layer))
 gradients = OrderedDict(zip(parameters, T.grad(cost, parameters)))
 steps = []
 step_updates = []
