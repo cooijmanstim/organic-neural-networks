@@ -220,9 +220,9 @@ for i in xrange(nepochs):
     print i, "done"
 cross_entropies.append(compute(cost, which_set="train"))
 
-identifier = hash(hyperparameters)
+identifier = abs(hash(frozenset(hyperparameters.items())))
 np.savez_compressed("fishers_%s.npz" % identifier,
                     fishers=np.asarray(np_fishers),
                     cross_entropies=np.asarray(cross_entropies))
-cPickle.dump(hyperparameters,
-             "hyperparameters_%s.yaml" % identifier)
+yaml.dump(hyperparameters,
+          open("hyperparameters_%s.yaml" % identifier, "w"))
