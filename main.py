@@ -26,8 +26,9 @@ hyperparameters = dict(
     # compute fisher based on supervised "loss" or model "output"
     objective="output",
     # eigenvalue bias
-    bias=1e-3,
-    batch_normalize=True,
+    eigenvalue_bias=1e-3,
+    variance_bias=1e-8,
+    batch_normalize=False,
     whiten_inputs=False,
     share_parameters=True)
 
@@ -84,9 +85,11 @@ x = T.nnet.conv.conv2d(
      / reduction**2),
     subsample=(reduction, reduction))
 x = x.flatten(ndim=2)
+input_dim = (28 / reduction)**2
 
 # input, hidden and output dims
-dims = [(28 / reduction)**2, 16, 16, 16, n_outputs]
+hidden_dims = 32 * [32]
+dims = [input_dim, hidden_dims[0]] + hidden_dims + [n_outputs]
 
 # allocate parameters
 fs = [activation.tanh for _ in dims[1:-1]] + [activation.logsoftmax]
@@ -131,7 +134,7 @@ for i in xrange(len(dims) - 1):
             h, c, U, V=W, d=b,
             decomposition=hyperparameters["decomposition"],
             zca=hyperparameters["zca"],
-            bias=hyperparameters["bias"])
+            bias=hyperparameters["eigenvalue_bias"])
         updates.extend(wupdates)
         checks.extend(wchecks)
         h = T.dot(h - c, U)
@@ -143,7 +146,7 @@ for i in xrange(len(dims) - 1):
     if hyperparameters["batch_normalize"]:
         mean = h.mean(axis=0, keepdims=True)
         var  = h.var (axis=0, keepdims=True)
-        h = (h - mean) / T.sqrt(var + 1e-16)
+        h = (h - mean) / T.sqrt(var + hyperparameters["variance_bias"])
         h *= gammas[i]
         layer_parameters.append(gammas[i])
 
