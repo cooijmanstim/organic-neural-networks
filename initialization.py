@@ -4,7 +4,7 @@ def constant(x):
     return lambda rng, shape: x * np.ones(shape)
 
 def identity():
-    return lambda rng, (m, n): np.eye(m, n)
+    return lambda rng, mn: np.eye(*mn)
 
 def scaled(scale, initializer):
     return lambda rng, shape: scale * initializer(rng, shape)
