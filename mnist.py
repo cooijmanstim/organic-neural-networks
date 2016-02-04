@@ -1,6 +1,6 @@
 import os
 import gzip
-import cPickle
+import pickle
 
 def get_data():
     path = os.environ["MNIST_PKL_GZ"]
@@ -15,9 +15,9 @@ def get_data():
 
     f = gzip.open(path, 'rb')
     try:
-        split = cPickle.load(f, encoding="latin1")
+        split = pickle.load(f, encoding="latin1")
     except TypeError:
-        split = cPickle.load(f)
+        split = pickle.load(f)
     f.close()
 
     which_sets = "train valid test".split()

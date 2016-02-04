@@ -2,7 +2,7 @@ import theano
 import theano.tensor as T
 
 def scale(scale=1):
-    return lambda parameter, step: scale * step
+    return lambda parameter, step: (scale * step, [])
 
 def rmsprop(scale=1, decay_rate=0.9, max_scaling=1e5):
     def compute(parameter, step):

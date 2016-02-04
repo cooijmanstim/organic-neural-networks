@@ -58,3 +58,8 @@ class lstsq(theano.gof.Op):
         outputs[1][0] = zz[1]
         outputs[2][0] = numpy.array(zz[2])
         outputs[3][0] = zz[3]
+
+def slice_sources(dataset, *slice_args):
+    s = slice(*slice_args)
+    return dict((source_name, source[s])
+                for source_name, source in dataset.items())
