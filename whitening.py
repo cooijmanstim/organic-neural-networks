@@ -19,7 +19,7 @@ def whiten_by_eigh(x, bias, zca):
     n = x.shape[0].astype(theano.config.floatX)
     covar = T.dot(x.T, x) / (n - 1)
     s, v = T.nlinalg.eigh(covar)
-    D = T.diag(1.0 / T.sqrt(s**2 + bias))
+    D = T.diag(1.0 / T.sqrt(s + bias))
     U = T.dot(D, v.T)
     if zca:
         U = T.dot(v, U)
