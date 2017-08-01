@@ -62,7 +62,7 @@ logp = h
 cross_entropy = -logp[T.arange(logp.shape[0]), targets]
 cost = cross_entropy.mean(axis=0)
 
-parameters = [layer[k] for k in ("cUWgb" if batch_normalize else "cUWb") for layer in layers]
+parameters = [layer[k] for k in ("Wgb" if batch_normalize else "Wb") for layer in layers]
 gradients = OrderedDict(zip(parameters, T.grad(cost, parameters)))
 steps = [(parameter, parameter - learning_rate * gradient)
          for parameter, gradient in gradients.items()]
